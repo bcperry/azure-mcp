@@ -7,17 +7,19 @@ using AzureMcp.Arguments;
 using AzureMcp.Models;
 using AzureMcp.Services.Interfaces;
 using Microsoft.Azure.Cosmos;
+using AzureMcp.Helpers;
 
 namespace AzureMcp.Services.Azure.Cosmos;
+
 
 public class CosmosService(ISubscriptionService subscriptionService, ITenantService tenantService)
     : BaseAzureService(tenantService), ICosmosService, IDisposable
 {
-    private const string CosmosBaseUri = "https://{0}.documents.azure.com:443/";
+    private string CosmosBaseUri = EnvironmentHelpers.GetEnvironmentVariableAsBool(UseAzureSovereignAuthorityHosts) ? "https://{0}.documents.azure.us:443/" : "https://{0}.documents.azure.com:443/";
     private CosmosClient? _cosmosClient;
     private bool _disposed;
     private readonly ISubscriptionService _subscriptionService = subscriptionService ?? throw new ArgumentNullException(nameof(subscriptionService));
-
+    private const string UseAzureSovereignAuthorityHosts = "AZURE_SOVEREIGN_AUTHORITY_HOST";
     private async Task<CosmosDBAccountResource> GetCosmosAccountAsync(
         string subscriptionId,
         string accountName,
@@ -48,6 +50,7 @@ public class CosmosService(ISubscriptionService subscriptionService, ITenantServ
         var clientOptions = new CosmosClientOptions { AllowBulkExecution = true };
         clientOptions.CosmosClientTelemetryOptions.DisableDistributedTracing = false;
         clientOptions.CustomHandlers.Add(new UserPolicyRequestHandler(UserAgent));
+        
 
         if (retryPolicy != null)
         {

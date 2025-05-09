@@ -38,6 +38,8 @@ public class CustomChainedCredential(string? tenantId = null) : TokenCredential
     private const string OnlyUseBrokerCredentialEnvVarName = "AZURE_MCP_ONLY_USE_BROKER_CREDENTIAL";
     private const string ClientIdEnvVarName = "AZURE_MCP_CLIENT_ID";
     private const string IncludeProductionCredentialEnvVarName = "AZURE_MCP_INCLUDE_PRODUCTION_CREDENTIALS";
+    private const string UseAzureSovereignAuthorityHosts = "AZURE_SOVEREIGN_AUTHORITY_HOST";
+
 
     private static bool ShouldUseOnlyBrokerCredential()
     {
@@ -75,6 +77,7 @@ public class CustomChainedCredential(string? tenantId = null) : TokenCredential
 
         InteractiveBrowserCredentialBrokerOptions brokerOptions = new(handle)
         {
+            AuthorityHost = EnvironmentHelpers.GetEnvironmentVariableAsBool(UseAzureSovereignAuthorityHosts) ? AzureAuthorityHosts.AzureGovernment : AzureAuthorityHosts.AzurePublicCloud,
             UseDefaultBrokerAccount = !ShouldUseOnlyBrokerCredential() && authRecord is null,
             TenantId = string.IsNullOrEmpty(tenantId) ? null : tenantId,
             AuthenticationRecord = authRecord,
@@ -98,6 +101,7 @@ public class CustomChainedCredential(string? tenantId = null) : TokenCredential
 
         return new DefaultAzureCredential(new DefaultAzureCredentialOptions
         {
+            AuthorityHost = AzureAuthorityHosts.AzureGovernment,
             TenantId = string.IsNullOrEmpty(tenantId) ? null : tenantId,
             ExcludeWorkloadIdentityCredential = !includeProdCreds,
             ExcludeManagedIdentityCredential = !includeProdCreds

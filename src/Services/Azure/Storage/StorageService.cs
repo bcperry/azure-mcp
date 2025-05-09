@@ -10,6 +10,7 @@ using Azure.Storage.Blobs;
 using Azure.Storage.Blobs.Models;
 using AzureMcp.Arguments;
 using AzureMcp.Models;
+using AzureMcp.Services.Azure.Tenant;
 using AzureMcp.Services.Interfaces;
 
 namespace AzureMcp.Services.Azure.Storage;
@@ -64,7 +65,7 @@ public class StorageService(ISubscriptionService subscriptionService, ITenantSer
     {
         ValidateRequiredParameters(accountName, subscriptionId);
 
-        var blobServiceClient = await CreateBlobServiceClient(accountName, tenant, retryPolicy);
+        var blobServiceClient = await CreateBlobServiceClient(accountName, subscriptionId, tenant, retryPolicy);
         var containers = new List<string>();
 
         try
@@ -179,7 +180,7 @@ public class StorageService(ISubscriptionService subscriptionService, ITenantSer
     {
         ValidateRequiredParameters(accountName, containerName, subscriptionId);
 
-        var blobServiceClient = await CreateBlobServiceClient(accountName, tenant, retryPolicy);
+        var blobServiceClient = await CreateBlobServiceClient(accountName, subscriptionId, tenant, retryPolicy);
         var containerClient = blobServiceClient.GetBlobContainerClient(containerName);
         var blobs = new List<string>();
 
@@ -207,7 +208,7 @@ public class StorageService(ISubscriptionService subscriptionService, ITenantSer
     {
         ValidateRequiredParameters(accountName, containerName);
 
-        var blobServiceClient = await CreateBlobServiceClient(accountName, tenant, retryPolicy);
+        var blobServiceClient = await CreateBlobServiceClient(accountName, subscriptionId, tenant, retryPolicy);
         var containerClient = blobServiceClient.GetBlobContainerClient(containerName);
 
         try
@@ -289,7 +290,7 @@ public class StorageService(ISubscriptionService subscriptionService, ITenantSer
         {
             case AuthMethod.Key:
                 var key = await GetStorageAccountKey(accountName, subscriptionId, tenant);
-                var uri = $"https://{accountName}.table.core.windows.net";
+                var uri = await GetServiceEndpointURI(accountName, subscriptionId, "table", tenant);
                 return new TableServiceClient(new Uri(uri), new TableSharedKeyCredential(accountName, key), options);
 
             case AuthMethod.ConnectionString:
@@ -298,14 +299,14 @@ public class StorageService(ISubscriptionService subscriptionService, ITenantSer
 
             case AuthMethod.Credential:
             default:
-                var defaultUri = $"https://{accountName}.table.core.windows.net";
+                var defaultUri = await GetServiceEndpointURI(accountName, subscriptionId, "table", tenant);
                 return new TableServiceClient(new Uri(defaultUri), await GetCredential(tenant), options);
         }
     }
 
-    private async Task<BlobServiceClient> CreateBlobServiceClient(string accountName, string? tenant = null, RetryPolicyArguments? retryPolicy = null)
+    private async Task<BlobServiceClient> CreateBlobServiceClient(string accountName, string subscriptionId, string? tenant = null, RetryPolicyArguments? retryPolicy = null)
     {
-        var uri = $"https://{accountName}.blob.core.windows.net";
+        var uri = await GetServiceEndpointURI(accountName, subscriptionId, "blob", tenant);
         var options = AddDefaultPolicies(new BlobClientOptions());
 
         if (retryPolicy != null)
@@ -318,4 +319,25 @@ public class StorageService(ISubscriptionService subscriptionService, ITenantSer
         }
         return new BlobServiceClient(new Uri(uri), await GetCredential(tenant), options);
     }
+    
+    private async Task<string> GetServiceEndpointURI(string accountName, string subscriptionId, string service, string? tenant = null) 
+    {
+        var subscription = await _subscriptionService.GetSubscription(subscriptionId, tenant);
+        var storageAccount = await GetStorageAccount(subscription, accountName) ??
+        throw new Exception($"Storage account '{accountName}' not found in subscription '{subscriptionId}'");
+        switch (service.ToLower())
+            {
+                case "blob":
+                    return storageAccount.Data.PrimaryEndpoints.BlobUri.ToString();
+                case "table":
+                    return storageAccount.Data.PrimaryEndpoints.TableUri.ToString();
+                case "queue":
+                    return storageAccount.Data.PrimaryEndpoints.QueueUri.ToString();
+                case "file":
+                    return storageAccount.Data.PrimaryEndpoints.FileUri.ToString();
+                default:
+                throw new ArgumentException($"Invalid service type: {service}");
+            }
+        }
 }
+

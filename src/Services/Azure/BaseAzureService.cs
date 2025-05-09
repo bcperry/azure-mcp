@@ -8,8 +8,12 @@ using Azure.ResourceManager;
 using AzureMcp.Arguments;
 using AzureMcp.Services.Azure.Authentication;
 using AzureMcp.Services.Interfaces;
+using AzureMcp.Helpers;
+
 
 namespace AzureMcp.Services.Azure;
+
+
 
 public abstract class BaseAzureService(ITenantService? tenantService = null)
 {
@@ -22,6 +26,8 @@ public abstract class BaseAzureService(ITenantService? tenantService = null)
     private string? _lastArmClientTenantId;
     private RetryPolicyArguments? _lastRetryPolicy;
     private readonly ITenantService? _tenantService = tenantService;
+    private const string UseAzureSovereignAuthorityHosts = "AZURE_SOVEREIGN_AUTHORITY_HOST";
+
 
     static BaseAzureService()
     {
@@ -103,6 +109,7 @@ public abstract class BaseAzureService(ITenantService? tenantService = null)
                 options.Retry.Delay = TimeSpan.FromSeconds(retryPolicy.DelaySeconds);
                 options.Retry.MaxDelay = TimeSpan.FromSeconds(retryPolicy.MaxDelaySeconds);
                 options.Retry.NetworkTimeout = TimeSpan.FromSeconds(retryPolicy.NetworkTimeoutSeconds);
+                options.Environment = EnvironmentHelpers.GetEnvironmentVariableAsBool(UseAzureSovereignAuthorityHosts)? ArmEnvironment.AzureGovernment: ArmEnvironment.AzurePublicCloud;
             }
 
             _armClient = new ArmClient(credential, default, options);

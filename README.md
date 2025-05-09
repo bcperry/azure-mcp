@@ -224,6 +224,14 @@ AZURE_MCP_INCLUDE_PRODUCTION_CREDENTIALS=true
 
 This is useful when running on Azure services where you want to use managed identities.
 
+### Azure Government Cloud
+
+By default, the Azure MCP Server attempts to authenticate and utilize the Azure Public Cloud. To enable the MCP to authenticate to Azure Government clouds, set the environment variable:
+
+```
+USE_AZURE_SOVEREIGN_AUTHORITY_HOSTS=true
+```
+
 ## 🛡️ Security Note
 
 Your credentials are always handled securely through the official [Azure Identity SDK](https://github.com/Azure/azure-sdk-for-net/blob/main/sdk/identity/Azure.Identity/README.md) - **we never store or manage tokens directly**.
