@@ -130,8 +130,29 @@ public sealed class KeyVaultService(ISubscriptionService subscriptionService) : 
 
         var credential = await GetCredential(tenantId);
         var keyvaultResource = await GetKeyVaultAsync(subscriptionId, vaultName, tenantId, retryPolicy);
-        return keyvaultResource.Data.Properties.VaultUri.ToString();
+        var value = keyvaultResource.Data.Properties.VaultUri.ToString();
+        if (string.IsNullOrEmpty(value))
+        {
+            throw new Exception($"Could not retrieve ClusterUri for cluster '{vaultName}'");
+        }
+        return value;
     }
 
+    public async Task<string> GetVaultUri(
+        string vaultName,
+        string subscriptionId,
+        string? tenantId = null,
+        RetryPolicyOptions? retryPolicy = null)
+    {
+        ValidateRequiredParameters(vaultName, subscriptionId);
 
+        var credential = await GetCredential(tenantId);
+        var keyvaultResource = await GetKeyVaultAsync(subscriptionId, vaultName, tenantId, retryPolicy);
+        var value = keyvaultResource.Data.Properties.VaultUri.ToString();
+        if (string.IsNullOrEmpty(value))
+        {
+            throw new Exception($"Could not retrieve ClusterUri for cluster '{vaultName}'");
+        }
+        return value;
+    }
 }
