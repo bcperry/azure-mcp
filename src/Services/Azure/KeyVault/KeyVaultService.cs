@@ -2,13 +2,36 @@
 // Licensed under the MIT License.
 
 using Azure.Security.KeyVault.Keys;
+using Azure.ResourceManager.KeyVault;
 using AzureMcp.Options;
 using AzureMcp.Services.Interfaces;
 
+
 namespace AzureMcp.Services.Azure.KeyVault;
 
-public sealed class KeyVaultService : BaseAzureService, IKeyVaultService
+public sealed class KeyVaultService(ISubscriptionService subscriptionService) : BaseAzureService, IKeyVaultService
 {
+    
+    private readonly ISubscriptionService _subscriptionService = subscriptionService ?? throw new ArgumentNullException(nameof(subscriptionService));
+    private async Task<KeyVaultResource> GetKeyVaultAsync(
+        string subscriptionId,
+        string vaultName,
+        string? tenant = null,
+        RetryPolicyOptions? retryPolicy = null)
+    {
+        ValidateRequiredParameters(subscriptionId, vaultName);
+
+        var subscription = await _subscriptionService.GetSubscription(subscriptionId, tenant, retryPolicy);
+
+        await foreach (var account in subscription.GetKeyVaultsAsync())
+        {
+            if (account.Data.Name == vaultName)
+            {
+                return account;
+            }
+        }
+        throw new Exception($"Cosmos DB account '{vaultName}' not found in subscription '{subscriptionId}'");
+    }
     public async Task<List<string>> ListKeys(
         string vaultName,
         bool includeManagedKeys,
@@ -17,9 +40,10 @@ public sealed class KeyVaultService : BaseAzureService, IKeyVaultService
         RetryPolicyOptions? retryPolicy = null)
     {
         ValidateRequiredParameters(vaultName, subscriptionId);
-
         var credential = await GetCredential(tenantId);
-        var client = new KeyClient(new Uri($"https://{vaultName}.vault.azure.net"), credential);
+    
+        var keyvaultResource = await GetKeyVaultAsync(subscriptionId, vaultName, tenantId, retryPolicy);
+        var client = new KeyClient(keyvaultResource.Data.Properties.VaultUri, credential);
         var keys = new List<string>();
 
         try
@@ -52,7 +76,8 @@ public sealed class KeyVaultService : BaseAzureService, IKeyVaultService
         }
 
         var credential = await GetCredential(tenantId);
-        var client = new KeyClient(new Uri($"https://{vaultName}.vault.azure.net"), credential);
+        var keyvaultResource = await GetKeyVaultAsync(subscriptionId, vaultName, tenantId, retryPolicy);
+        var client = new KeyClient(keyvaultResource.Data.Properties.VaultUri, credential);
 
         try
         {
@@ -86,7 +111,8 @@ public sealed class KeyVaultService : BaseAzureService, IKeyVaultService
 
         var type = new KeyType(keyType);
         var credential = await GetCredential(tenantId);
-        var client = new KeyClient(new Uri($"https://{vaultName}.vault.azure.net"), credential);
+        var keyvaultResource = await GetKeyVaultAsync(subscriptionId, vaultName, tenantId, retryPolicy);
+        var client = new KeyClient(keyvaultResource.Data.Properties.VaultUri, credential);
 
         try
         {
