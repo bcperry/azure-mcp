@@ -64,7 +64,7 @@ public class StorageService(ISubscriptionService subscriptionService, ITenantSer
     {
         ValidateRequiredParameters(accountName, subscriptionId);
 
-        var blobServiceClient = await CreateBlobServiceClient(accountName, tenant, retryPolicy);
+        var blobServiceClient = await CreateBlobServiceClient(accountName, subscriptionId, tenant, retryPolicy);
         var containers = new List<string>();
 
         try
@@ -179,7 +179,7 @@ public class StorageService(ISubscriptionService subscriptionService, ITenantSer
     {
         ValidateRequiredParameters(accountName, containerName, subscriptionId);
 
-        var blobServiceClient = await CreateBlobServiceClient(accountName, tenant, retryPolicy);
+        var blobServiceClient = await CreateBlobServiceClient(accountName, subscriptionId, tenant, retryPolicy);
         var containerClient = blobServiceClient.GetBlobContainerClient(containerName);
         var blobs = new List<string>();
 
@@ -207,7 +207,7 @@ public class StorageService(ISubscriptionService subscriptionService, ITenantSer
     {
         ValidateRequiredParameters(accountName, containerName);
 
-        var blobServiceClient = await CreateBlobServiceClient(accountName, tenant, retryPolicy);
+        var blobServiceClient = await CreateBlobServiceClient(accountName, subscriptionId, tenant, retryPolicy);
         var containerClient = blobServiceClient.GetBlobContainerClient(containerName);
 
         try
@@ -250,7 +250,8 @@ public class StorageService(ISubscriptionService subscriptionService, ITenantSer
         }
 
         var firstKey = keys.FirstOrDefault() ?? throw new Exception($"No keys found for storage account '{accountName}'");
-        return $"DefaultEndpointsProtocol=https;AccountName={accountName};AccountKey={firstKey.Value};EndpointSuffix=core.windows.net";
+        var endpoint = storageAccount.Data.PrimaryEndpoints.BlobUri.ToString().Substring(storageAccount.Data.PrimaryEndpoints.TableUri.ToString().IndexOf('.'));
+        return $"DefaultEndpointsProtocol=https;AccountName={accountName};AccountKey={firstKey.Value};{endpoint}";
     }
 
     // Helper method to get storage account
@@ -285,11 +286,15 @@ public class StorageService(ISubscriptionService subscriptionService, ITenantSer
             options.Retry.NetworkTimeout = TimeSpan.FromSeconds(retryPolicy.NetworkTimeoutSeconds);
         }
 
+        var subscription = await _subscriptionService.GetSubscription(subscriptionId, tenant);
+        var storageAccount = await GetStorageAccount(subscription, accountName) ??
+                    throw new Exception($"Storage account '{accountName}' not found in subscription '{subscriptionId}'");
+
         switch (authMethod)
         {
             case AuthMethod.Key:
                 var key = await GetStorageAccountKey(accountName, subscriptionId, tenant);
-                var uri = $"https://{accountName}.table.core.windows.net";
+                var uri = storageAccount.Data.PrimaryEndpoints.TableUri.ToString();
                 return new TableServiceClient(new Uri(uri), new TableSharedKeyCredential(accountName, key), options);
 
             case AuthMethod.ConnectionString:
@@ -298,14 +303,18 @@ public class StorageService(ISubscriptionService subscriptionService, ITenantSer
 
             case AuthMethod.Credential:
             default:
-                var defaultUri = $"https://{accountName}.table.core.windows.net";
+                var defaultUri = storageAccount.Data.PrimaryEndpoints.TableUri.ToString();
                 return new TableServiceClient(new Uri(defaultUri), await GetCredential(tenant), options);
         }
     }
 
-    private async Task<BlobServiceClient> CreateBlobServiceClient(string accountName, string? tenant = null, RetryPolicyOptions? retryPolicy = null)
+    private async Task<BlobServiceClient> CreateBlobServiceClient(string accountName, string subscriptionId, string? tenant = null, RetryPolicyOptions? retryPolicy = null)
     {
-        var uri = $"https://{accountName}.blob.core.windows.net";
+        var subscription = await _subscriptionService.GetSubscription(subscriptionId, tenant);
+        var storageAccount = await GetStorageAccount(subscription, accountName) ??
+            throw new Exception($"Storage account '{accountName}' not found in subscription '{subscriptionId}'");
+
+        var uri = storageAccount.Data.PrimaryEndpoints.BlobUri.ToString();
         var options = AddDefaultPolicies(new BlobClientOptions());
 
         if (retryPolicy != null)
