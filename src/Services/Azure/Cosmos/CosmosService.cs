@@ -14,7 +14,6 @@ public class CosmosService(ISubscriptionService subscriptionService, ITenantServ
 {
     private readonly ISubscriptionService _subscriptionService = subscriptionService ?? throw new ArgumentNullException(nameof(subscriptionService));
     private readonly ICacheService _cacheService = cacheService ?? throw new ArgumentNullException(nameof(cacheService));
-    private const string CosmosBaseUri = "https://{0}.documents.azure.com:443/";
     private const string CACHE_GROUP = "cosmos";
     private const string COSMOS_CLIENTS_CACHE_KEY_PREFIX = "clients_";
     private static readonly TimeSpan CACHE_DURATION_CLIENTS = TimeSpan.FromMinutes(15);
@@ -57,14 +56,14 @@ public class CosmosService(ISubscriptionService subscriptionService, ITenantServ
             clientOptions.MaxRetryWaitTimeOnRateLimitedRequests = TimeSpan.FromSeconds(retryPolicy.MaxDelaySeconds);
         }
 
+        var cosmosAccount = await GetCosmosAccountAsync(subscriptionId, accountName, tenant);
         CosmosClient cosmosClient;
         switch (authMethod)
         {
             case AuthMethod.Key:
-                var cosmosAccount = await GetCosmosAccountAsync(subscriptionId, accountName, tenant);
                 var keys = await cosmosAccount.GetKeysAsync();
                 cosmosClient = new CosmosClient(
-                    string.Format(CosmosBaseUri, accountName),
+                    cosmosAccount.Data.DocumentEndpoint.ToString(),
                     keys.Value.PrimaryMasterKey,
                     clientOptions);
                 break;
@@ -72,7 +71,7 @@ public class CosmosService(ISubscriptionService subscriptionService, ITenantServ
             case AuthMethod.Credential:
             default:
                 cosmosClient = new CosmosClient(
-                    string.Format(CosmosBaseUri, accountName),
+                    cosmosAccount.Data.DocumentEndpoint.ToString(),
                     await GetCredential(tenant),
                     clientOptions);
                 break;
