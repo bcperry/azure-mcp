@@ -1,9 +1,11 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+using Azure.Identity;
 using Azure.ResourceManager.Kusto;
 using AzureMcp.Commands.Kusto;
 using AzureMcp.Options;
+using AzureMcp.Services.Azure.Tenant;
 using AzureMcp.Services.Interfaces;
 using Kusto.Cloud.Platform.Data;
 using Kusto.Data;
@@ -17,6 +19,12 @@ public sealed class KustoService(
     ITenantService tenantService,
     ICacheService cacheService) : BaseAzureService(tenantService), IKustoService
 {
+      private static readonly Dictionary<string, Uri> AllowedAuthorityHosts = new(StringComparer.OrdinalIgnoreCase)
+    {
+        { "AzurePublicCloud", AzureAuthorityHosts.AzurePublicCloud }, // AzureCloud
+        { "AzureUSGovernment", AzureAuthorityHosts.AzureGovernment },   // AzureUSGovernment
+        { "AzureChinaCloud", AzureAuthorityHosts.AzureChina },       // AzureChinaCloud
+    };
     private readonly ISubscriptionService _subscriptionService = subscriptionService ?? throw new ArgumentNullException(nameof(subscriptionService));
     private readonly ICacheService _cacheService = cacheService ?? throw new ArgumentNullException(nameof(cacheService));
 
@@ -25,7 +33,7 @@ public sealed class KustoService(
     private const string KUSTO_ADMINPROVIDER_CACHE_KEY = "adminprovider";
     private static readonly TimeSpan CACHE_DURATION = TimeSpan.FromHours(1);
     private static readonly TimeSpan PROVIDER_CACHE_DURATION = TimeSpan.FromHours(2);
-
+    private const string AuthorityHostEnvVarName = "AZURE_MCP_AUTHORITY_HOST";
     // Provider cache key generator
     private static string GetProviderCacheKey(KustoConnectionStringBuilder kcsb)
         => $"{KUSTO_ADMINPROVIDER_CACHE_KEY}_{kcsb.DataSource}_{kcsb.InitialCatalog}_{kcsb.Authority}_{kcsb.ToString()}";
@@ -329,6 +337,7 @@ public sealed class KustoService(
         string? connectionString = null,
         string? tenant = null)
     {
+        string? authorityHost = Environment.GetEnvironmentVariable(AuthorityHostEnvVarName);
         switch (authMethod)
         {
             case AuthMethod.Key:
@@ -344,9 +353,22 @@ public sealed class KustoService(
             default:
                 var credential = await GetCredential(tenant);
                 var builder = new KustoConnectionStringBuilder(uri).WithAadAzureTokenCredentialsAuthentication(credential);
-                if (!string.IsNullOrEmpty(tenant))
+                if (!string.IsNullOrEmpty(tenant) && !string.IsNullOrEmpty(authorityHost))
                 {
-                    builder.Authority = $"https://login.microsoftonline.com/{tenant}";
+                    var defaultCredentialOptions = new DefaultAzureCredentialOptions
+                    {
+                        TenantId = tenant
+                    };
+
+                    // Validate the authority host against the allowed list
+                    if (!AllowedAuthorityHosts.TryGetValue(authorityHost, out Uri? validatedUri))
+                    {
+                        var allowedHosts = string.Join(", ", AllowedAuthorityHosts.Keys);
+                        throw new ArgumentException($"The authority host '{authorityHost}' is not allowed. Allowed values are: {allowedHosts}");
+                    }
+
+                    
+                    builder.Authority = $"{validatedUri.Authority}/{tenant}";
                 }
 
                 return builder;
