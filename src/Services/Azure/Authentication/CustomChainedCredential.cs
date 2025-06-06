@@ -22,6 +22,14 @@ public class CustomChainedCredential(string? tenantId = null) : TokenCredential
 {
     private ChainedTokenCredential? _chainedCredential;
 
+    // Allowed authority host URLs for Azure cloud environments
+    private static readonly Dictionary<string, Uri> AllowedAuthorityHosts = new(StringComparer.OrdinalIgnoreCase)
+    {
+        { "AzurePublicCloud", AzureAuthorityHosts.AzurePublicCloud }, // AzureCloud
+        { "AzureUSGovernment", AzureAuthorityHosts.AzureGovernment },   // AzureUSGovernment
+        { "AzureChinaCloud", AzureAuthorityHosts.AzureChina },       // AzureChinaCloud
+    };
+
     public override AccessToken GetToken(TokenRequestContext requestContext, CancellationToken cancellationToken)
     {
         _chainedCredential ??= CreateChainedCredential(tenantId);
@@ -39,6 +47,7 @@ public class CustomChainedCredential(string? tenantId = null) : TokenCredential
     private const string OnlyUseBrokerCredentialEnvVarName = "AZURE_MCP_ONLY_USE_BROKER_CREDENTIAL";
     private const string ClientIdEnvVarName = "AZURE_MCP_CLIENT_ID";
     private const string IncludeProductionCredentialEnvVarName = "AZURE_MCP_INCLUDE_PRODUCTION_CREDENTIALS";
+    private const string AuthorityHostEnvVarName = "AZURE_MCP_AUTHORITY_HOST";
 
     private static bool ShouldUseOnlyBrokerCredential()
     {
@@ -71,6 +80,7 @@ public class CustomChainedCredential(string? tenantId = null) : TokenCredential
     private static TokenCredential CreateBrowserCredential(string? tenantId, AuthenticationRecord? authRecord)
     {
         string? clientId = Environment.GetEnvironmentVariable(ClientIdEnvVarName);
+        string? authorityHost = Environment.GetEnvironmentVariable(AuthorityHostEnvVarName);
 
         IntPtr handle = WindowHandleProvider.GetWindowHandle();
 
@@ -90,6 +100,18 @@ public class CustomChainedCredential(string? tenantId = null) : TokenCredential
             brokerOptions.ClientId = clientId;
         }
 
+        if (!string.IsNullOrEmpty(authorityHost))
+        {
+            // Validate the authority host against the allowed list
+            if (!AllowedAuthorityHosts.TryGetValue(authorityHost, out Uri? validatedUri))
+            {
+                var allowedHosts = string.Join(", ", AllowedAuthorityHosts.Keys);
+                throw new ArgumentException($"The authority host '{authorityHost}' is not allowed. Allowed values are: {allowedHosts}");
+            }
+
+            brokerOptions.AuthorityHost = validatedUri;
+        }
+
         var browserCredential = new InteractiveBrowserCredential(brokerOptions);
 
         // Check for timeout value in the environment variable
@@ -105,6 +127,7 @@ public class CustomChainedCredential(string? tenantId = null) : TokenCredential
     private static DefaultAzureCredential CreateDefaultCredential(string? tenantId)
     {
         var includeProdCreds = EnvironmentHelpers.GetEnvironmentVariableAsBool(IncludeProductionCredentialEnvVarName);
+        string? authorityHost = Environment.GetEnvironmentVariable(AuthorityHostEnvVarName);
 
         var defaultCredentialOptions = new DefaultAzureCredentialOptions
         {
@@ -115,6 +138,18 @@ public class CustomChainedCredential(string? tenantId = null) : TokenCredential
         if (!string.IsNullOrEmpty(tenantId))
         {
             defaultCredentialOptions.TenantId = tenantId;
+        }
+
+        if (!string.IsNullOrEmpty(authorityHost))
+        {
+            // Validate the authority host against the allowed list
+            if (!AllowedAuthorityHosts.TryGetValue(authorityHost, out Uri? validatedUri))
+            {
+                var allowedHosts = string.Join(", ", AllowedAuthorityHosts.Keys);
+                throw new ArgumentException($"The authority host '{authorityHost}' is not allowed. Allowed values are: {allowedHosts}");
+            }
+
+            defaultCredentialOptions.AuthorityHost = validatedUri;
         }
 
         return new DefaultAzureCredential(defaultCredentialOptions);
