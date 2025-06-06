@@ -230,3 +230,13 @@ public sealed class SearchService(ISubscriptionService subscriptionService, ICac
         }
     }
 }
+
+private static async Task<SearchService> GetSearchServicesAsync(
+    SubscriptionResource subscriptionResource,
+    CancellationToken cancellationToken = default)
+{
+    await foreach (var service in subscriptionResource.GetSearchServicesAsync(cancellationToken: cancellationToken))
+    {
+        yield return service;
+    }
+}
