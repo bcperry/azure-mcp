@@ -251,7 +251,7 @@ public class StorageService(ISubscriptionService subscriptionService, ITenantSer
 
         var firstKey = keys.FirstOrDefault() ?? throw new Exception($"No keys found for storage account '{accountName}'");
         var endpoint = storageAccount.Data.PrimaryEndpoints.BlobUri.ToString().Substring(storageAccount.Data.PrimaryEndpoints.TableUri.ToString().IndexOf('.'));
-        return $"DefaultEndpointsProtocol=https;AccountName={accountName};AccountKey={firstKey.Value};{endpoint}";
+        return $"DefaultEndpointsProtocol=https;AccountName={accountName};AccountKey={firstKey.Value};EndpointSuffix={endpoint}";
     }
 
     // Helper method to get storage account
