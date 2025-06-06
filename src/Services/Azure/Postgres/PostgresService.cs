@@ -20,14 +20,14 @@ public class PostgresService : BaseAzureService, IPostgresService
 
     }
 
-    private async Task<string> GetEntraIdAccessTokenAsync()
+    private async Task<string> GetEntraIdAccessTokenAsync(string endpoint)
     {
         if (_cachedEntraIdAccessToken != null && DateTime.UtcNow < _tokenExpiryTime)
         {
             return _cachedEntraIdAccessToken;
         }
 
-        var tokenRequestContext = new TokenRequestContext(new[] { "https://ossrdbms-aad.database.windows.net/.default" });
+        var tokenRequestContext = new TokenRequestContext(new[] { $"https://ossrdbms-aad.{endpoint}/.default" });
         var tokenCredential = await GetCredential();
         var accessToken = await tokenCredential
             .GetTokenAsync(tokenRequestContext, CancellationToken.None)
@@ -49,8 +49,13 @@ public class PostgresService : BaseAzureService, IPostgresService
 
     public async Task<List<string>> ListDatabasesAsync(string subscriptionId, string resourceGroup, string user, string server)
     {
-        var entraIdAccessToken = await GetEntraIdAccessTokenAsync();
-        var host = NormalizeServerName(server);
+        ResourceIdentifier resourceGroupId = ResourceGroupResource.CreateResourceIdentifier(subscriptionId, resourceGroup);
+        var armClient = await CreateArmClientAsync();
+        var rg = armClient.GetResourceGroupResource(resourceGroupId);
+        var pgServer = await rg.GetPostgreSqlFlexibleServerAsync(server);
+        var host = pgServer.Value.Data.FullyQualifiedDomainName;
+        var endpoint =  host.Substring(host.IndexOf('.'));
+        var entraIdAccessToken = await GetEntraIdAccessTokenAsync(endpoint);
         var connectionString = $"Host={host};Database=postgres;Username={user};Password={entraIdAccessToken};";
 
         await using var connection = new NpgsqlConnection(connectionString);
@@ -68,8 +73,13 @@ public class PostgresService : BaseAzureService, IPostgresService
 
     public async Task<List<string>> ExecuteQueryAsync(string subscriptionId, string resourceGroup, string user, string server, string database, string query)
     {
-        var entraIdAccessToken = await GetEntraIdAccessTokenAsync();
-        var host = NormalizeServerName(server);
+        ResourceIdentifier resourceGroupId = ResourceGroupResource.CreateResourceIdentifier(subscriptionId, resourceGroup);
+        var armClient = await CreateArmClientAsync();
+        var rg = armClient.GetResourceGroupResource(resourceGroupId);
+        var pgServer = await rg.GetPostgreSqlFlexibleServerAsync(server);
+        var host = pgServer.Value.Data.FullyQualifiedDomainName;
+        var endpoint =  host.Substring(host.IndexOf('.'));
+        var entraIdAccessToken = await GetEntraIdAccessTokenAsync(endpoint);
         var connectionString = $"Host={host};Database={database};Username={user};Password={entraIdAccessToken};";
         await using var connection = new NpgsqlConnection(connectionString);
         await connection.OpenAsync();
@@ -97,8 +107,13 @@ public class PostgresService : BaseAzureService, IPostgresService
 
     public async Task<List<string>> ListTablesAsync(string subscriptionId, string resourceGroup, string user, string server, string database)
     {
-        var entraIdAccessToken = await GetEntraIdAccessTokenAsync();
-        var host = NormalizeServerName(server);
+        ResourceIdentifier resourceGroupId = ResourceGroupResource.CreateResourceIdentifier(subscriptionId, resourceGroup);
+        var armClient = await CreateArmClientAsync();
+        var rg = armClient.GetResourceGroupResource(resourceGroupId);
+        var pgServer = await rg.GetPostgreSqlFlexibleServerAsync(server);
+        var host = pgServer.Value.Data.FullyQualifiedDomainName;
+        var endpoint =  host.Substring(host.IndexOf('.'));
+        var entraIdAccessToken = await GetEntraIdAccessTokenAsync(endpoint);
         var connectionString = $"Host={host};Database={database};Username={user};Password={entraIdAccessToken};";
         await using var connection = new NpgsqlConnection(connectionString);
         await connection.OpenAsync();
@@ -115,8 +130,13 @@ public class PostgresService : BaseAzureService, IPostgresService
 
     public async Task<List<string>> GetTableSchemaAsync(string subscriptionId, string resourceGroup, string user, string server, string database, string table)
     {
-        var entraIdAccessToken = await GetEntraIdAccessTokenAsync();
-        var host = NormalizeServerName(server);
+        ResourceIdentifier resourceGroupId = ResourceGroupResource.CreateResourceIdentifier(subscriptionId, resourceGroup);
+        var armClient = await CreateArmClientAsync();
+        var rg = armClient.GetResourceGroupResource(resourceGroupId);
+        var pgServer = await rg.GetPostgreSqlFlexibleServerAsync(server);
+        var host = pgServer.Value.Data.FullyQualifiedDomainName;
+        var endpoint =  host.Substring(host.IndexOf('.'));
+        var entraIdAccessToken = await GetEntraIdAccessTokenAsync(endpoint);
         var connectionString = $"Host={host};Database={database};Username={user};Password={entraIdAccessToken};";
 
         await using var connection = new NpgsqlConnection(connectionString);
